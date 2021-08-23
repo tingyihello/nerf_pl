@@ -157,7 +157,7 @@ def create_spheric_poses(radius, n_poses=120):
 
 
 class LLFFDataset(Dataset):
-    def __init__(self, root_dir, split='train', img_wh=(504, 378), spheric_poses=False, val_num=1):
+    def __init__(self, root_dir, split='train', llff_split=5, img_wh=(504, 378), spheric_poses=False, val_num=2):
         """
         spheric_poses: whether the images are taken in a spheric inward-facing manner
                        default: False (forward-facing)
@@ -171,14 +171,15 @@ class LLFFDataset(Dataset):
         self.define_transforms()
 
         self.read_meta()
-        self.white_back = False
+        self.white_back = True
+        self.llff_split = llff_split
 
     def read_meta(self):
         poses_bounds = np.load(os.path.join(self.root_dir,
                                             'poses_bounds.npy')) # (N_images, 17)
-        self.image_paths = sorted(glob.glob(os.path.join(self.root_dir, 'images/*')))
+        self.image_paths = sorted(glob.glob(os.path.join(self.root_dir, 'images/*')))  ######### notice
                         # load full resolution image then resize
-        if self.split in ['train', 'val']:
+        if self.split in ['train', 'val','test']:
             assert len(poses_bounds) == len(self.image_paths), \
                 'Mismatch between number of images and number of poses! Please rerun COLMAP!'
 
@@ -201,6 +202,11 @@ class LLFFDataset(Dataset):
         distances_from_center = np.linalg.norm(self.poses[..., 3], axis=1)
         val_idx = np.argmin(distances_from_center) # choose val image as the closest to
                                                    # center image
+        train_idx = np.array([i for i in np.arange(poses.shape[0])[::5] if
+                        (i!=val_idx)])
+        
+        test_idx = np.array([i for i in np.arange(int(poses.shape[0])) if
+                        (i not in train_idx and i!=val_idx)])
 
         # Step 3: correct scale so that the nearest depth is at a little more than 1.0
         # See https://github.com/bmild/nerf/issues/34
@@ -219,7 +225,11 @@ class LLFFDataset(Dataset):
             self.all_rays = []
             self.all_rgbs = []
             for i, image_path in enumerate(self.image_paths):
-                if i == val_idx: # exclude the val image
+                # if i == val_idx: # exclude the val image
+                #     continue
+
+                #### modified by sy
+                if i == val_idx or i in test_idx: # exclude the val image
                     continue
                 c2w = torch.FloatTensor(self.poses[i])
 
@@ -251,6 +261,48 @@ class LLFFDataset(Dataset):
                                  
             self.all_rays = torch.cat(self.all_rays, 0) # ((N_images-1)*h*w, 8)
             self.all_rgbs = torch.cat(self.all_rgbs, 0) # ((N_images-1)*h*w, 3)
+
+        elif self.split == 'test': # create buffer of all rays and rgb data
+                                  # use first N_images-1 to train, the LAST is val
+            self.all_rays = []
+            self.all_rgbs = []
+            for i, image_path in enumerate(self.image_paths):
+                # if i == val_idx: # exclude the val image
+                #     continue
+
+                #### modified by sy
+                if i == val_idx or i in train_idx: # exclude the val image
+                    continue
+                c2w = torch.FloatTensor(self.poses[i])
+
+                img = Image.open(image_path).convert('RGB')
+                assert img.size[1]*self.img_wh[0] == img.size[0]*self.img_wh[1], \
+                    f'''{image_path} has different aspect ratio than img_wh, 
+                        please check your data!'''
+                img = img.resize(self.img_wh, Image.LANCZOS)
+                img = self.transform(img) # (3, h, w)
+                img = img.view(3, -1).permute(1, 0) # (h*w, 3) RGB
+                self.all_rgbs += [img]
+                
+                rays_o, rays_d = get_rays(self.directions, c2w) # both (h*w, 3)
+                if not self.spheric_poses:
+                    near, far = 0, 1
+                    rays_o, rays_d = get_ndc_rays(self.img_wh[1], self.img_wh[0],
+                                                  self.focal, 1.0, rays_o, rays_d)
+                                     # near plane is always at 1.0
+                                     # near and far in NDC are always 0 and 1
+                                     # See https://github.com/bmild/nerf/issues/34
+                else:
+                    near = self.bounds.min()
+                    far = min(8 * near, self.bounds.max()) # focus on central object only
+
+                self.all_rays += [torch.cat([rays_o, rays_d, 
+                                             near*torch.ones_like(rays_o[:, :1]),
+                                             far*torch.ones_like(rays_o[:, :1])],
+                                             1)] # (h*w, 8)
+                                 
+            # self.all_rays = torch.cat(self.all_rays, 0) # ((N_images-1)*h*w, 8)
+            # self.all_rgbs = torch.cat(self.all_rgbs, 0) # ((N_images-1)*h*w, 3)
         
         elif self.split == 'val':
             print('val image is', self.image_paths[val_idx])
@@ -264,7 +316,7 @@ class LLFFDataset(Dataset):
                 focus_depth = 3.5 # hardcoded, this is numerically close to the formula
                                   # given in the original repo. Mathematically if near=1
                                   # and far=infinity, then this number will converge to 4
-                radii = np.percentile(np.abs(self.poses[..., 3]), 90, axis=0)
+                radii = np.percentile(np.abs(self.poses[..., 3]), 90, axis=0) #计算5全部的poses排序之后的大于90%的t1,t2,t3的shu zhi
                 self.poses_test = create_spiral_poses(radii, focus_depth)
             else:
                 radius = 1.1 * self.bounds.min()
@@ -275,6 +327,10 @@ class LLFFDataset(Dataset):
 
     def __len__(self):
         if self.split == 'train':
+            print("train_images number: ", len(self.all_rays))
+            return len(self.all_rays)
+        if self.split == 'test':
+            print("test_images number: ", len(self.all_rays))
             return len(self.all_rays)
         if self.split == 'val':
             return self.val_num
@@ -284,7 +340,10 @@ class LLFFDataset(Dataset):
         if self.split == 'train': # use data in the buffers
             sample = {'rays': self.all_rays[idx],
                       'rgbs': self.all_rgbs[idx]}
-
+        elif self.split == 'test': # use data in the buffers
+            sample = {'rays': self.all_rays[idx],
+                      'rgbs': self.all_rgbs[idx]}
+                      
         else:
             if self.split == 'val':
                 c2w = torch.FloatTensor(self.c2w_val)

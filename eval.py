@@ -27,7 +27,7 @@ def get_opts():
                         help='which dataset to validate')
     parser.add_argument('--scene_name', type=str, default='test',
                         help='scene name, used as output folder name')
-    parser.add_argument('--split', type=str, default='test',
+    parser.add_argument('--split', type=str, default='test_poses',
                         help='test or test_train')
     parser.add_argument('--img_wh', nargs="+", type=int, default=[800, 800],
                         help='resolution (img_w, img_h) of the image')
@@ -101,6 +101,10 @@ if __name__ == "__main__":
     embedding_dir = Embedding(3, 4)
     nerf_coarse = NeRF()
     nerf_fine = NeRF()
+    ckpt = torch.load(args.ckpt_path)
+    # nerf_coarse.load_state_dict(ckpt['network_coarse_state_dict'])
+    # nerf_fine.load_state_dict(ckpt['network_fine_state_dict'])
+
     load_ckpt(nerf_coarse, args.ckpt_path, model_name='nerf_coarse')
     load_ckpt(nerf_fine, args.ckpt_path, model_name='nerf_fine')
     nerf_coarse.cuda().eval()
@@ -123,6 +127,7 @@ if __name__ == "__main__":
                                     dataset.white_back)
 
         img_pred = results['rgb_fine'].view(h, w, 3).cpu().numpy()
+        print("rgb mean:  ", results['rgb_fine'].mean())
         
         if args.save_depth:
             depth_pred = results['depth_fine'].view(h, w).cpu().numpy()

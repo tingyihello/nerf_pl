@@ -61,6 +61,8 @@ def get_opts():
     parser.add_argument('--warmup_epochs', type=int, default=0,
                         help='Gradually warm-up(increasing) learning rate in optimizer')
     ###########################
+    parser.add_argument('--llff_split', type=int, default=5,
+                        help='split the data to [train, test]')
     #### params for steplr ####
     parser.add_argument('--decay_step', nargs='+', type=int, default=[20],
                         help='scheduler decay step')

@@ -1,0 +1,31 @@
+<mxfile>
+    <diagram id="RVRiT8v2cTKOj0IkYbwC" name="Page-1">
+        <mxGraphModel dx="642" dy="1123" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="2" value="加载数据和模型" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="260" y="220" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="3" value="创建cube：x,y,z的范围可以调整" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="260" y="360" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="4" value="分成chunk预测rgb+sigma。&lt;br&gt;其中xyz为cube的体素坐标，方向dir设为0" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="270" y="500" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="5" value="使用marching_cube 算法，对预测出的sigma以及预设的阈值，恢复顶点和三角面的mesh" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="270" y="650" width="290" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="6" value="extract_color_mesh" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="270" y="1140" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="7" value="对mesh上的三角形进行聚类，相连的聚成一类，只保留包含三角形最多的那一类。其它的作为噪声，从mesh中remove掉" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="250" y="810" width="290" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="8" value="预测每个顶点的颜色； 有两种方案&lt;br&gt;1. 使用每个顶点的法线方向。&lt;br&gt;顶点的坐标作为rays_o, 法线的方向作为它的rays_d，在射线上采点，使用训练好的model预测rgb，作为这个顶点的color。&lt;br&gt;2. 使用color average method：&lt;br&gt;把顶点投影到每个training image，推断出color" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="150" y="900" width="410" height="160" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

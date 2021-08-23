@@ -37,7 +37,6 @@ class Embedding(nn.Module):
 
         return torch.cat(out, -1)
 
-
 class NeRF(nn.Module):
     def __init__(self,
                  D=8, W=256,

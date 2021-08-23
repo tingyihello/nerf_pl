@@ -77,6 +77,7 @@ class NeRFSystem(LightningModule):
         if self.hparams.dataset_name == 'llff':
             kwargs['spheric_poses'] = self.hparams.spheric_poses
             kwargs['val_num'] = self.hparams.num_gpus
+            kwargs['llff_split'] = self.hparams.llff_split
         self.train_dataset = dataset(split='train', **kwargs)
         self.val_dataset = dataset(split='val', **kwargs)
 
@@ -106,6 +107,8 @@ class NeRFSystem(LightningModule):
         results = self(rays)
         log['train/loss'] = loss = self.loss(results, rgbs)
         typ = 'fine' if 'rgb_fine' in results else 'coarse'
+        print("rgb_pred:  ", results['rgb_fine'].mean())
+        print("rgb_gt:  ", rgbs.mean())
 
         with torch.no_grad():
             psnr_ = psnr(results[f'rgb_{typ}'], rgbs)

@@ -155,6 +155,7 @@ if __name__ == "__main__":
     vertices_.dtype = [('x', 'f4'), ('y', 'f4'), ('z', 'f4')]
 
     face = np.empty(len(triangles), dtype=[('vertex_indices', 'i4', (3,))])
+    # 创建一个长度为len(triangles)的空数组，里面的每个元素的类型为[('vertex_indices', 'int4', (3,))]
     face['vertex_indices'] = triangles
 
     PlyData([PlyElement.describe(vertices_[:, 0], 'vertex'), 
@@ -163,11 +164,11 @@ if __name__ == "__main__":
     # remove noise in the mesh by keeping only the biggest cluster
     print('Removing noise ...')
     mesh = o3d.io.read_triangle_mesh(f"{args.scene_name}.ply")
-    idxs, count, _ = mesh.cluster_connected_triangles()
+    idxs, count, _ = mesh.cluster_connected_triangles()  #对相连的三角形进行聚类，得到类别序号idxs和每个类的数量count
     max_cluster_idx = np.argmax(count)
-    triangles_to_remove = [i for i in range(len(face)) if idxs[i] != max_cluster_idx]
-    mesh.remove_triangles_by_index(triangles_to_remove)
-    mesh.remove_unreferenced_vertices()
+    triangles_to_remove = [i for i in range(len(face)) if idxs[i] != max_cluster_idx]  #计算需要remove的三角mesh
+    mesh.remove_triangles_by_index(triangles_to_remove)  # 原mesh中去掉需要remove的三角形
+    mesh.remove_unreferenced_vertices()   #去掉孤立的顶点
     print(f'Mesh has {len(mesh.vertices)/1e6:.2f} M vertices and {len(mesh.triangles)/1e6:.2f} M faces.')
 
     vertices_ = np.asarray(mesh.vertices).astype(np.float32)
@@ -186,6 +187,7 @@ if __name__ == "__main__":
 
     if args.use_vertex_normal: ## use normal vector method as suggested by the author.
                                ## see https://github.com/bmild/nerf/issues/44
+        #这个方法的效果不好，why??????????????
         mesh.compute_vertex_normals()
         rays_d = torch.FloatTensor(np.asarray(mesh.vertex_normals))
         near = dataset.bounds.min() * torch.ones_like(rays_d[:, :1])
@@ -217,6 +219,8 @@ if __name__ == "__main__":
             image = np.array(image)
 
             ## read the camera to world relative pose
+            # 对每一幅train image，把所有的顶点投影到上面，超出图像的部分，进行clip
+            # ？？？超出图像边界的部分难道不应该直接丢弃吗
             P_c2w = np.concatenate([dataset.poses[idx], np.array([0, 0, 0, 1]).reshape(1, 4)], 0)
             P_w2c = np.linalg.inv(P_c2w)[:3] # (3, 4)
             ## project vertices from world coordinate to camera coordinate
@@ -241,7 +245,7 @@ if __name__ == "__main__":
                                     vertices_image[i:i+remap_chunk, 0],
                                     vertices_image[i:i+remap_chunk, 1],
                                     interpolation=cv2.INTER_LINEAR)[:, 0]]
-            colors = np.vstack(colors) # (N_vertices, 3)
+            colors = np.vstack(colors) # (N_vertices, 3) 每个顶点在当前image上得到的color
             
             ## predict occlusion of each vertex
             ## we leverage the concept of NeRF by constructing rays coming out from the camera
@@ -249,9 +253,11 @@ if __name__ == "__main__":
             ## we can know if the vertex is occluded or not.
             ## for vertices that appear to be occluded from every input view, we make the
             ## assumption that its color is the same as its neighbors that are facing our side.
+            ## 对于每个似乎被遮挡的顶点，令它的color和它的面对我们的方向的临近点的颜色相同
             ## (think of a surface with one side facing us: we assume the other side has the same color)
 
             ## ray's origin is camera origin
+            ## ray的原点为相机的原点，方向由相机原点指向顶点
             rays_o = torch.FloatTensor(dataset.poses[idx][:, -1]).expand(N_vertices, 3)
             ## ray's direction is the vector pointing from camera origin to the vertices
             rays_d = torch.FloatTensor(vertices_) - rays_o # (N_vertices, 3)
@@ -259,6 +265,7 @@ if __name__ == "__main__":
             near = dataset.bounds.min() * torch.ones_like(rays_o[:, :1])
             ## the far plane is the depth of the vertices, since what we want is the accumulated
             ## opacity along the path from camera origin to the vertices
+            ##  因为想要的是从相机原点到顶点之间的opacity，所以令ray的far平面为顶点的深度
             far = torch.FloatTensor(depth) * torch.ones_like(rays_o[:, :1])
             results = f([nerf_fine], embeddings,
                         torch.cat([rays_o, rays_d, near, far], 1).cuda(),
@@ -267,7 +274,7 @@ if __name__ == "__main__":
                         args.chunk,
                         dataset.white_back)
             opacity = results['opacity_coarse'].cpu().numpy()[:, np.newaxis] # (N_vertices, 1)
-            opacity = np.nan_to_num(opacity, 1)
+            opacity = np.nan_to_num(opacity, 1)  #从相机原点到顶点的opacity的sum
 
             non_occluded = np.ones_like(non_occluded_sum) * 0.1/depth # weight by inverse depth
                                                                     # near=more confident in color

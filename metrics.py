@@ -1,5 +1,6 @@
 import torch
 from kornia.losses import ssim as dssim
+import lpips
 
 def mse(image_pred, image_gt, valid_mask=None, reduction='mean'):
     value = (image_pred-image_gt)**2
@@ -18,3 +19,14 @@ def ssim(image_pred, image_gt, reduction='mean'):
     """
     dssim_ = dssim(image_pred, image_gt, 3, reduction) # dissimilarity in [0, 1]
     return 1-2*dssim_ # in [-1, 1]
+
+def LPIPS(image_pred, image_gt, alex=None):
+    image_pred = image_pred.permute(3, 1, 2)
+    image_gt = image_gt.cpu().permute(3, 1, 2)
+    
+    if alex is not None:
+        loss_fn = lpips.LPIPS(net='alex')
+    else:
+        loss_fn = lpips.LPIPS(net='vgg')
+
+    return loss_fn(image_pred, image_gt)
